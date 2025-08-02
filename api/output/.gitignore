@@ -1,0 +1,3 @@
+# Игнорируем все файлы в папке output, кроме .gitignore
+*
+!.gitignore 

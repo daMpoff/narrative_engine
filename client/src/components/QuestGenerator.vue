@@ -1,0 +1,558 @@
+<template>
+  <div class="quest-generator">
+    <!-- Hero Section -->
+    <div class="hero-section">
+      <div class="container">
+        <div class="row justify-content-center">
+          <div class="col-lg-8 text-center">
+            <h1 class="display-3 fw-bold text-white mb-4">
+              🎮 Генератор квестов
+            </h1>
+            <p class="lead text-white-50 mb-5">
+              Создавайте увлекательные текстовые квесты с помощью ИИ
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mt-5">
+      <div class="row justify-content-center">
+        <div class="col-lg-12">
+          <!-- Navigation Tabs -->
+          <ul class="nav nav-tabs mb-4" id="questTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link active"
+                id="generator-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#generator"
+                type="button"
+                role="tab"
+              >
+                <i class="fas fa-magic me-2"></i>
+                Создать квест
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="graph-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#graph"
+                type="button"
+                role="tab"
+                :disabled="!quest"
+              >
+                <i class="fas fa-project-diagram me-2"></i>
+                Граф путей
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="history-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#history"
+                type="button"
+                role="tab"
+              >
+                <i class="fas fa-history me-2"></i>
+                История
+              </button>
+            </li>
+          </ul>
+
+          <!-- Tab Content -->
+          <div class="tab-content" id="questTabsContent">
+            <!-- Generator Tab -->
+            <div
+              class="tab-pane fade show active"
+              id="generator"
+              role="tabpanel"
+            >
+              <!-- Form Card -->
+              <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white">
+                  <h2 class="mb-0">
+                    <i class="fas fa-magic me-2"></i>
+                    Создать новый квест
+                  </h2>
+                </div>
+                <div class="card-body p-4">
+                  <form @submit.prevent="generateQuest">
+                    <div class="row">
+                      <div class="col-md-4 mb-3">
+                        <label for="genre" class="form-label fw-bold">
+                          <i class="fas fa-theater-masks me-2"></i>Жанр
+                        </label>
+                        <input
+                          id="genre"
+                          v-model="formData.genre"
+                          type="text"
+                          class="form-control form-control-lg"
+                          placeholder="киберпанк, фэнтези, детектив"
+                          required
+                        />
+                      </div>
+
+                      <div class="col-md-4 mb-3">
+                        <label for="hero" class="form-label fw-bold">
+                          <i class="fas fa-user me-2"></i>Главный герой
+                        </label>
+                        <input
+                          id="hero"
+                          v-model="formData.hero"
+                          type="text"
+                          class="form-control form-control-lg"
+                          placeholder="хакер-одиночка, рыцарь"
+                          required
+                        />
+                      </div>
+
+                      <div class="col-md-4 mb-3">
+                        <label for="goal" class="form-label fw-bold">
+                          <i class="fas fa-bullseye me-2"></i>Цель квеста
+                        </label>
+                        <input
+                          id="goal"
+                          v-model="formData.goal"
+                          type="text"
+                          class="form-control form-control-lg"
+                          placeholder="взломать систему"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Настройки генерации -->
+                    <div class="row mb-4">
+                      <div class="col-12">
+                        <div class="card border-info">
+                          <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                              <i class="fas fa-cogs me-2"></i>
+                              Настройки генерации
+                            </h5>
+                          </div>
+                          <div class="card-body">
+                            <div class="row">
+                              <div class="col-md-6 mb-3">
+                                <label
+                                  for="sceneCount"
+                                  class="form-label fw-bold"
+                                >
+                                  <i class="fas fa-film me-2"></i>Количество
+                                  сцен
+                                </label>
+                                <div class="d-flex align-items-center">
+                                  <input
+                                    id="sceneCount"
+                                    v-model.number="formData.sceneCount"
+                                    type="range"
+                                    class="form-range me-3"
+                                    min="5"
+                                    max="10"
+                                    step="1"
+                                  />
+                                  <span class="badge bg-primary fs-6">{{
+                                    formData.sceneCount
+                                  }}</span>
+                                </div>
+                                <small class="text-muted"
+                                  >От 5 до 10 сцен</small
+                                >
+                              </div>
+
+                              <div class="col-md-6 mb-3">
+                                <label
+                                  for="maxDepth"
+                                  class="form-label fw-bold"
+                                >
+                                  <i class="fas fa-route me-2"></i>Максимальная
+                                  глубина
+                                </label>
+                                <div class="d-flex align-items-center">
+                                  <input
+                                    id="maxDepth"
+                                    v-model.number="formData.maxDepth"
+                                    type="range"
+                                    class="form-range me-3"
+                                    min="3"
+                                    max="8"
+                                    step="1"
+                                  />
+                                  <span class="badge bg-success fs-6">{{
+                                    formData.maxDepth
+                                  }}</span>
+                                </div>
+                                <small class="text-muted"
+                                  >От 3 до 8 уровней</small
+                                >
+                              </div>
+                            </div>
+
+                            <div class="row">
+                              <div class="col-md-6 mb-3">
+                                <label
+                                  for="complexity"
+                                  class="form-label fw-bold"
+                                >
+                                  <i class="fas fa-brain me-2"></i>Сложность
+                                  сюжета
+                                </label>
+                                <select
+                                  id="complexity"
+                                  v-model="formData.complexity"
+                                  class="form-select"
+                                >
+                                  <option value="simple">Простой</option>
+                                  <option value="medium">Средний</option>
+                                  <option value="complex">Сложный</option>
+                                  <option value="epic">Эпический</option>
+                                </select>
+                                <small class="text-muted"
+                                  >Влияет на разнообразие сюжета</small
+                                >
+                              </div>
+
+                              <div class="col-md-6 mb-3">
+                                <label
+                                  for="endingType"
+                                  class="form-label fw-bold"
+                                >
+                                  <i class="fas fa-flag-checkered me-2"></i>Тип
+                                  концовок
+                                </label>
+                                <select
+                                  id="endingType"
+                                  v-model="formData.endingType"
+                                  class="form-select"
+                                >
+                                  <option value="single">Одна концовка</option>
+                                  <option value="multiple">
+                                    Множественные концовки
+                                  </option>
+                                  <option value="branching">
+                                    Разветвленные концовки
+                                  </option>
+                                </select>
+                                <small class="text-muted"
+                                  >Структура финалов</small
+                                >
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="text-center">
+                      <button
+                        type="submit"
+                        :disabled="loading"
+                        class="btn btn-primary btn-lg px-5 py-3"
+                      >
+                        <span
+                          v-if="loading"
+                          class="spinner-border spinner-border-sm me-2"
+                        ></span>
+                        <i v-else class="fas fa-dice me-2"></i>
+                        {{
+                          loading
+                            ? "Генерируем квест..."
+                            : "🎲 Генерировать квест"
+                        }}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Result Section -->
+              <div v-if="quest" class="mt-5">
+                <!-- Success Alert -->
+                <div
+                  class="alert alert-success d-flex align-items-center"
+                  role="alert"
+                >
+                  <i class="fas fa-check-circle me-2"></i>
+                  <div>
+                    <h4 class="alert-heading mb-1">✅ Квест успешно создан!</h4>
+                    <p class="mb-0">
+                      <strong>Файл:</strong>
+                      {{ quest?.saved_file || "Не сохранен" }} |
+                      <strong>Папка:</strong> output/
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Quest Display -->
+                <div class="card shadow-lg border-0">
+                  <div class="card-header bg-success text-white">
+                    <h3 class="mb-0">
+                      <i class="fas fa-book-open me-2"></i>
+                      Сгенерированный квест
+                    </h3>
+                  </div>
+                  <div class="card-body p-4">
+                    <div class="row">
+                      <div
+                        v-for="(scene, index) in quest?.quest_data?.scenes ||
+                        []"
+                        :key="scene.scene_id"
+                        class="col-12 mb-4"
+                      >
+                        <div class="card border-primary">
+                          <div class="card-header bg-primary text-white">
+                            <h4 class="mb-0">
+                              <i class="fas fa-play-circle me-2"></i>
+                              Сцена {{ index + 1 }}: {{ scene.scene_id }}
+                            </h4>
+                          </div>
+                          <div class="card-body">
+                            <div class="scene-description mb-3">
+                              <p class="lead">{{ scene.text }}</p>
+                            </div>
+
+                            <div class="choices-section">
+                              <h5 class="text-primary mb-3">
+                                <i class="fas fa-list me-2"></i>
+                                Варианты выбора:
+                              </h5>
+                              <div class="row">
+                                <div
+                                  v-for="(
+                                    choice, choiceIndex
+                                  ) in scene.choices || []"
+                                  :key="choiceIndex"
+                                  class="col-md-6 mb-2"
+                                >
+                                  <div class="card border-info">
+                                    <div class="card-body p-3">
+                                      <div class="d-flex align-items-center">
+                                        <span class="badge bg-info me-2">{{
+                                          choiceIndex + 1
+                                        }}</span>
+                                        <span class="flex-grow-1">{{
+                                          choice.text
+                                        }}</span>
+                                        <i
+                                          class="fas fa-arrow-right text-muted"
+                                        ></i>
+                                        <span class="badge bg-secondary ms-2">{{
+                                          choice.next_scene
+                                        }}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Alert -->
+              <div v-if="error" class="mt-4">
+                <div
+                  class="alert alert-danger d-flex align-items-center"
+                  role="alert"
+                >
+                  <i class="fas fa-exclamation-triangle me-2"></i>
+                  <div>
+                    <h4 class="alert-heading mb-1">❌ Ошибка</h4>
+                    <p class="mb-0">{{ error }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graph Tab -->
+            <div class="tab-pane fade" id="graph" role="tabpanel">
+              <div v-if="quest">
+                <QuestGraph :quest="quest.quest_data" />
+              </div>
+              <div v-else class="text-center py-5">
+                <i class="fas fa-project-diagram fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">Граф недоступен</h5>
+                <p class="text-muted">
+                  Сначала создайте квест, чтобы увидеть граф путей
+                </p>
+              </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+              <QuestHistory />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, watch } from "vue";
+import axios from "axios";
+import QuestGraph from "./QuestGraph.vue";
+import QuestHistory from "./QuestHistory.vue";
+
+const API_BASE_URL = "http://127.0.0.1:8000/api";
+
+const formData = reactive({
+  genre: "киберпанк",
+  hero: "хакер-одиночка",
+  goal: "взломать систему безопасности",
+  sceneCount: 10, // Добавляем настройки генерации
+  maxDepth: 5,
+  complexity: "medium",
+  endingType: "single",
+});
+
+const quest = ref(null);
+const loading = ref(false);
+const error = ref(null);
+
+const generateQuest = async () => {
+  loading.value = true;
+  error.value = null;
+
+  try {
+    const response = await axios.post(`${API_BASE_URL}/generate/`, {
+      genre: formData.genre,
+      hero: formData.hero,
+      goal: formData.goal,
+      scene_count: formData.sceneCount, // Отправляем настройки генерации
+      max_depth: formData.maxDepth,
+      complexity: formData.complexity,
+      ending_type: formData.endingType,
+    });
+    quest.value = response.data;
+
+    // Переключаемся на вкладку графа после успешной генерации
+    setTimeout(() => {
+      const graphTab = document.getElementById("graph-tab");
+      if (graphTab) {
+        const tab = new bootstrap.Tab(graphTab);
+        tab.show();
+      }
+    }, 1000);
+  } catch (err) {
+    error.value =
+      err.response?.data?.error || "Произошла ошибка при генерации квеста";
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Следим за изменениями quest для обновления состояния вкладок
+watch(quest, (newQuest) => {
+  const graphTab = document.getElementById("graph-tab");
+  if (graphTab) {
+    graphTab.disabled = !newQuest;
+  }
+});
+</script>
+
+<style scoped>
+.hero-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 80px 0;
+  margin-bottom: 30px;
+}
+
+.quest-generator {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.nav-tabs {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #6c757d;
+  font-weight: 500;
+  padding: 12px 20px;
+  transition: all 0.3s ease;
+}
+
+.nav-tabs .nav-link:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.nav-tabs .nav-link.active {
+  border-color: #667eea;
+  color: #667eea;
+  background: transparent;
+}
+
+.nav-tabs .nav-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  border-bottom: none;
+  padding: 1.5rem;
+}
+
+.form-control-lg {
+  font-size: 1.1rem;
+  padding: 12px 16px;
+}
+
+.btn-lg {
+  font-size: 1.1rem;
+  padding: 12px 30px;
+}
+
+.scene-description {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #007bff;
+}
+
+.choices-section {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #2196f3;
+}
+
+.alert {
+  border: none;
+  border-radius: 10px;
+}
+
+@media (max-width: 768px) {
+  .hero-section {
+    padding: 40px 0;
+  }
+
+  .display-3 {
+    font-size: 2.5rem;
+  }
+
+  .nav-tabs .nav-link {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+}
+</style>
