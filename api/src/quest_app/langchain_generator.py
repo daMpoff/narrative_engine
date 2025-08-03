@@ -94,14 +94,24 @@ class LangChainQuestGenerator:
 
 Параметры: жанр {genre}, герой {hero}, цель {goal}. Создай РОВНО {scene_count} сцен.
 
+ВАЖНО - ID сцен должны отражать СОДЕРЖАНИЕ:
+- Места: "dark_forest", "ancient_temple", "boss_chamber", "hidden_cave"
+- Действия: "search_clues", "battle_guards", "solve_riddle", "escape_trap"
+- Состояния: "wounded_hero", "found_key", "magic_awakened"
+
+Создай развилки в ЛОГИЧНЫХ местах:
+- После исследования (выбор пути)
+- Перед опасностью (атака/обход)
+- При находке (использовать/оставить)
+
 Формат:
 {{
-  "scene_ids": ["start", "choice1", "choice2", "deep_path", "quest_end"],
+  "scene_ids": ["start", "meaningful_name1", "meaningful_name2", "deep_location", "quest_end"],
   "connections": {{
-    "start": ["choice1", "choice2"],
-    "choice1": ["deep_path"],
-    "choice2": ["quest_end"],
-    "deep_path": ["quest_end"],
+    "start": ["meaningful_name1", "meaningful_name2"],
+    "meaningful_name1": ["deep_location"],
+    "meaningful_name2": ["quest_end"],
+    "deep_location": ["quest_end"],
     "quest_end": ["quest_end"]
   }},
   "validation": {{
@@ -124,20 +134,29 @@ class LangChainQuestGenerator:
 Жанр: {genre}, Герой: {hero}, Цель: {goal}
 
 Правила:
-- Каждая сцена (кроме quest_end) имеет 2+ выбора
+- Каждая сцена (кроме quest_end) имеет 2+ РАЗНЫХ выбора
 - Используй ТОЛЬКО scene_id из плана в next_scene
 - Все пути ведут к quest_end
 - НЕ создавай циклы
+
+ВАЖНО - разнообразные типы выборов:
+- Действие vs. Осторожность: "Атаковать" vs. "Обойти стороной"
+- Риск vs. Безопасность: "Рискнуть прыгнуть" vs. "Найти другой путь"
+- Помощь vs. Одиночество: "Попросить помощи" vs. "Справиться самому"
+- Исследование vs. Движение: "Изучить артефакт" vs. "Идти дальше"
+- Честность vs. Хитрость: "Сказать правду" vs. "Солгать"
+
+Каждый выбор должен ЛОГИЧНО соответствовать содержанию сцены!
 
 JSON формат:
 {{
   "scenes": [
     {{
       "scene_id": "start",
-      "text": "Описание на русском",
+      "text": "Описание ситуации на русском (минимум 50 слов)",
       "choices": [
-        {{"text": "Выбор 1", "next_scene": "scene_из_плана"}},
-        {{"text": "Выбор 2", "next_scene": "другая_scene_из_плана"}}
+        {{"text": "Активный выбор (действие)", "next_scene": "scene_из_плана"}},
+        {{"text": "Альтернативный выбор (другой подход)", "next_scene": "другая_scene_из_плана"}}
       ]
     }}
   ]
@@ -152,18 +171,29 @@ JSON формат:
         validation_prompt = ChatPromptTemplate.from_messages([
             ("system", """Проверь квест. Отвечай JSON.
 
-Правила:
-- Минимум 2 выбора в сцене (кроме quest_end)
-- Все next_scene должны существовать
-- Есть quest_end
-- НОРМАЛЬНО: 2+ выборов к одной сцене
+Правила проверки:
+1. Каждая сцена (кроме quest_end) имеет МИНИМУМ 2 выбора
+2. Все next_scene существуют в списке сцен
+3. Есть сцена quest_end
+4. ВАЖНО: Если сцена имеет 2+ выбора - это ВАЛИДНО, даже если они ведут к одной сцене!
+
+Пример ВАЛИДНОЙ сцены:
+{{
+  "scene_id": "final_battle",
+  "choices": [
+    {{"text": "Атаковать мечом", "next_scene": "quest_end"}},
+    {{"text": "Использовать магию", "next_scene": "quest_end"}}
+  ]
+}}
+
+НЕ считай это ошибкой! Количество выборов = 2, это соответствует требованиям.
 
 Квест: {quest}
 
-Формат:
+Формат ответа:
 {{
-  "valid": true,
-  "errors": []
+  "valid": true/false,
+  "errors": ["описание ошибки если есть"]
 }}"""),
             ("human", "Проверь квест.")
         ])
