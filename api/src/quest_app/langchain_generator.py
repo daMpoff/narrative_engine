@@ -1,295 +1,352 @@
 """
-LangChain-based Quest Generator
-Улучшенный генератор квестов с использованием LangChain для лучшего планирования и памяти
+Улучшенный многоэтапный генератор квестов через LangChain
 """
+
 import json
 import os
-from typing import Dict, List, Optional, Any
-from django.conf import settings
+from typing import Dict, Any, List, Optional
 
-# LangChain imports
+# Импорт Pydantic для валидации данных
 try:
-    from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-    from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
-    from langchain_core.runnables import RunnablePassthrough
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from pydantic import BaseModel, Field
-    
-    # Попробуем разные варианты импорта Mistral для LangChain
-    ChatMistralAI = None
+    from pydantic import BaseModel, Field, validator
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    print("Pydantic не найден, используем базовую валидацию")
+    PYDANTIC_AVAILABLE = False
+    BaseModel = object
+
+# Импорт LangChain компонентов
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import JsonOutputParser
+    LANGCHAIN_CORE_AVAILABLE = True
+except ImportError:
+    print("langchain_core не найден")
+    LANGCHAIN_CORE_AVAILABLE = False
+
+# Импорт Mistral AI для LangChain
+ChatMistralAI = None
+try:
+    from langchain_mistralai import ChatMistralAI
+    MISTRAL_LANGCHAIN_AVAILABLE = True
+    print("langchain_mistralai успешно импортирован")
+except ImportError:
     try:
-        from langchain_mistralai import ChatMistralAI
+        from langchain.llms import ChatMistralAI
+        MISTRAL_LANGCHAIN_AVAILABLE = True
+        print("ChatMistralAI импортирован из langchain.llms")
     except ImportError:
-        try:
-            from langchain.llms import Mistral as ChatMistralAI
-        except ImportError:
-            pass  # ChatMistralAI остается None
-    
-    LANGCHAIN_AVAILABLE = True
-except ImportError as e:
-    LANGCHAIN_AVAILABLE = False
-    print(f"Warning: LangChain not available: {e}. Using fallback generator.")
+        MISTRAL_LANGCHAIN_AVAILABLE = False
+        print("Mistral AI для LangChain не найден")
 
+# Модели данных для валидации
+if PYDANTIC_AVAILABLE:
+    class QuestScene(BaseModel):
+        scene_id: str = Field(..., description="Уникальный ID сцены")
+        text: str = Field(..., min_length=10, description="Описание сцены")
+        choices: List[Dict[str, str]] = Field(..., description="Список выборов")
 
-class QuestScene(BaseModel):
-    """Модель сцены квеста"""
-    scene_id: str = Field(description="Уникальный ID сцены в snake_case формате")
-    text: str = Field(description="Описание сцены на русском языке, минимум 10 символов")
-    choices: List[Dict[str, str]] = Field(description="Список выборов игрока")
+        @validator('text')
+        def text_must_be_meaningful(cls, v):
+            if len(v.strip()) < 10:
+                raise ValueError('Текст сцены должен содержать минимум 10 символов')
+            return v
 
-
-class Quest(BaseModel):
-    """Модель квеста"""
-    scenes: List[QuestScene] = Field(description="Список всех сцен квеста")
-
+    class Quest(BaseModel):
+        scenes: List[QuestScene] = Field(..., description="Список сцен квеста")
 
 class LangChainQuestGenerator:
-    """Генератор квестов с использованием LangChain"""
+    """Многоэтапный генератор квестов с детальным планированием"""
     
     def __init__(self):
         self.llm = None
-        self.quest_planner = None
-        self.quest_creator = None
-        self.quest_validator = None
+        self.step1_mapper = None     # Этап 1: Структурная карта
+        self.step2_planner = None    # Этап 2: Детальное планирование
+        self.step3_generator = None  # Этап 3: Генерация контента
+        self.step4_validator = None  # Этап 4: Валидация и исправления
         self.setup_langchain()
     
+    def is_available(self) -> bool:
+        """Проверка доступности LangChain"""
+        return (LANGCHAIN_CORE_AVAILABLE and 
+                MISTRAL_LANGCHAIN_AVAILABLE and 
+                self.llm is not None)
+    
     def setup_langchain(self):
-        """Настройка LangChain компонентов"""
-        if not LANGCHAIN_AVAILABLE:
-            print("LangChain недоступен")
+        """Настройка LangChain и создание цепочек"""
+        if not LANGCHAIN_CORE_AVAILABLE or not MISTRAL_LANGCHAIN_AVAILABLE:
+            print("❌ LangChain компоненты недоступны")
             return
-        
-        api_key = settings.MISTRAL_API_KEY
-        if not api_key or api_key == "your_mistral_api_key_here":
-            print("Mistral API ключ не настроен для LangChain")
-            return
-        
+            
         try:
-            # Инициализация LLM
-            if ChatMistralAI is None:
-                print("ChatMistralAI недоступен, LangChain генератор отключен")
+            # Получаем API ключ
+            api_key = os.getenv('MISTRAL_API_KEY')
+            if not api_key:
+                print("❌ MISTRAL_API_KEY не найден в переменных окружения")
                 return
-                
+            
+            # Инициализация Mistral AI
             self.llm = ChatMistralAI(
-                model=settings.MISTRAL_MODEL,
-                api_key=api_key,
-                temperature=0.7,
-                max_tokens=100000
+                model="mistral-large-latest",
+                mistral_api_key=api_key,
+                temperature=0.7
             )
             
-            # Создание цепочек
-            self._create_planning_chain()
-            self._create_generation_chain()
-            self._create_validation_chain()
+            # Создание всех этапов
+            self._create_step1_mapping()
+            self._create_step2_planning()
+            self._create_step3_generation()
+            self._create_step4_validation()
             
-            print("LangChain Quest Generator настроен успешно")
+            print("✅ LangChain Quest Generator настроен успешно")
             
         except Exception as e:
-            print(f"Ошибка настройки LangChain: {e}")
+            print(f"❌ Ошибка настройки LangChain: {e}")
+            self.llm = None
     
-    def _create_planning_chain(self):
-        """Создание цепочки планирования квеста"""
-        planning_prompt = ChatPromptTemplate.from_messages([
-            ("system", """План квеста для хакатона. Требования: 5-10 сцен, минимум 1 развилка, 1 ветвь глубиной 3+ сцены, БЕЗ ЦИКЛОВ.
+    def _create_step1_mapping(self):
+        """Этап 1: Создание структурной карты квеста"""
+        mapping_prompt = ChatPromptTemplate.from_messages([
+            ("system", """ЭТАП 1: СТРУКТУРНАЯ КАРТА КВЕСТА
 
-Параметры: жанр {genre}, герой {hero}, цель {goal}. Создай РОВНО {scene_count} сцен.
+Ты - архитектор квестов. Создай ОБЩУЮ СТРУКТУРУ для жанра "{genre}", героя "{hero}", цели "{goal}".
 
-ВАЖНО - ID сцен должны отражать СОДЕРЖАНИЕ:
-- Места: "dark_forest", "ancient_temple", "boss_chamber", "hidden_cave"
-- Действия: "search_clues", "battle_guards", "solve_riddle", "escape_trap"
-- Состояния: "wounded_hero", "found_key", "magic_awakened"
+ЗАДАЧА: Придумай {scene_count} уникальных локаций/ситуаций:
 
-Создай развилки в ЛОГИЧНЫХ местах:
-- После исследования (выбор пути)
-- Перед опасностью (атака/обход)
-- При находке (использовать/оставить)
+1. НАЗВАНИЯ СЦЕН по содержанию:
+   - Места: "dark_forest", "ancient_temple", "dragon_lair"
+   - Действия: "search_ruins", "battle_bandits", "solve_puzzle"
+   - События: "meet_wizard", "find_artifact", "final_confrontation"
 
-Формат:
+2. ЛОГИЧЕСКАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ:
+   - start: всегда первая (точка входа)
+   - 2-3 развилки: места выбора пути
+   - quest_end: всегда последняя (финал)
+
+3. СВЯЗИ между сценами (кто к кому ведет)
+
+Формат ответа:
 {{
-  "scene_ids": ["start", "meaningful_name1", "meaningful_name2", "deep_location", "quest_end"],
-  "connections": {{
-    "start": ["meaningful_name1", "meaningful_name2"],
-    "meaningful_name1": ["deep_location"],
-    "meaningful_name2": ["quest_end"],
-    "deep_location": ["quest_end"],
-    "quest_end": ["quest_end"]
-  }},
-  "validation": {{
-    "has_quest_end": true,
-    "no_cycles": true,
-    "scene_count_correct": true
+  "quest_structure": {{
+    "theme": "краткое описание темы квеста",
+    "scenes": [
+      {{
+        "scene_id": "start",
+        "type": "entry_point",
+        "concept": "Начальная ситуация"
+      }},
+      {{
+        "scene_id": "meaningful_name1",
+        "type": "exploration/action/decision",
+        "concept": "Что происходит в этой сцене"
+      }},
+      {{
+        "scene_id": "quest_end",
+        "type": "conclusion",
+        "concept": "Финальная сцена"
+      }}
+    ],
+    "flow": {{
+      "start": ["scene1", "scene2"],
+      "scene1": ["scene3"],
+      "scene2": ["quest_end"],
+      "scene3": ["quest_end"],
+      "quest_end": ["quest_end"]
+    }}
   }}
 }}"""),
-            ("human", "Создай план квеста.")
+            ("human", "Создай структурную карту квеста.")
         ])
         
-        self.quest_planner = planning_prompt | self.llm | JsonOutputParser()
+        self.step1_mapper = mapping_prompt | self.llm | JsonOutputParser()
     
-    def _create_generation_chain(self):
-        """Создание цепочки генерации квеста"""
-        generation_prompt = ChatPromptTemplate.from_messages([
-            ("system", """Создай квест для хакатона по плану. БЕЗ ЦИКЛОВ! Используй ТОЛЬКО scene_id из плана.
+    def _create_step2_planning(self):
+        """Этап 2: Детальное планирование выборов"""
+        planning_prompt = ChatPromptTemplate.from_messages([
+            ("system", """ЭТАП 2: ДЕТАЛЬНОЕ ПЛАНИРОВАНИЕ ВЫБОРОВ
 
-План: {plan}
-Жанр: {genre}, Герой: {hero}, Цель: {goal}
+Основа: {quest_structure}
+Параметры: {genre}, {hero}, {goal}
 
-Правила:
-- Каждая сцена (кроме quest_end) имеет 2+ РАЗНЫХ выбора
-- Используй ТОЛЬКО scene_id из плана в next_scene
-- Все пути ведут к quest_end
-- НЕ создавай циклы
+ЗАДАЧА: Для КАЖДОЙ сцены спланируй КОНКРЕТНЫЕ ВЫБОРЫ:
 
-ВАЖНО - разнообразные типы выборов:
-- Действие vs. Осторожность: "Атаковать" vs. "Обойти стороной"
-- Риск vs. Безопасность: "Рискнуть прыгнуть" vs. "Найти другой путь"
-- Помощь vs. Одиночество: "Попросить помощи" vs. "Справиться самому"
-- Исследование vs. Движение: "Изучить артефакт" vs. "Идти дальше"
-- Честность vs. Хитрость: "Сказать правду" vs. "Солгать"
+1. ТИП ВЫБОРОВ для каждой сцены:
+   - Действие vs Осторожность: "Атаковать" vs "Обойти"
+   - Риск vs Безопасность: "Рискнуть" vs "Играть осторожно"
+   - Помощь vs Самостоятельность: "Попросить помощи" vs "Справиться самому"
+   - Исследование vs Продвижение: "Изучить детально" vs "Идти дальше"
 
-Каждый выбор должен ЛОГИЧНО соответствовать содержанию сцены!
+2. КАЖДЫЙ ВЫБОР должен:
+   - Соответствовать концепции сцены
+   - Логично вести к следующей сцене
+   - Быть интересным игроку
 
-JSON формат:
+Формат ответа:
 {{
-  "scenes": [
+  "detailed_plan": [
     {{
       "scene_id": "start",
-      "text": "Описание ситуации на русском (минимум 50 слов)",
-      "choices": [
-        {{"text": "Активный выбор (действие)", "next_scene": "scene_из_плана"}},
-        {{"text": "Альтернативный выбор (другой подход)", "next_scene": "другая_scene_из_плана"}}
+      "situation": "Описание ситуации в сцене",
+      "choice_strategy": "Тип выбора (развилка/действие/etc)",
+      "planned_choices": [
+        {{
+          "choice_text": "Конкретный текст выбора",
+          "choice_type": "action/caution/risk/etc",
+          "next_scene": "куда ведет",
+          "reasoning": "почему этот выбор логичен"
+        }}
       ]
     }}
   ]
 }}"""),
-            ("human", "Создай квест.")
+            ("human", "Создай детальный план выборов.")
         ])
         
-        self.quest_creator = generation_prompt | self.llm | JsonOutputParser()
+        self.step2_planner = planning_prompt | self.llm | JsonOutputParser()
     
-    def _create_validation_chain(self):
-        """Создание цепочки валидации квеста"""
-        validation_prompt = ChatPromptTemplate.from_messages([
-            ("system", """Проверь квест. Отвечай JSON.
+    def _create_step3_generation(self):
+        """Этап 3: Генерация полного контента"""
+        generation_prompt = ChatPromptTemplate.from_messages([
+            ("system", """ЭТАП 3: ГЕНЕРАЦИЯ ПОЛНОГО КОНТЕНТА
 
-Правила проверки:
-1. Каждая сцена (кроме quest_end) имеет МИНИМУМ 2 выбора
-2. Все next_scene существуют в списке сцен
-3. Есть сцена quest_end
-4. ВАЖНО: Если сцена имеет 2+ выбора - это ВАЛИДНО, даже если они ведут к одной сцене!
+План: {detailed_plan}
+Параметры: {genre}, {hero}, {goal}
 
-Пример ВАЛИДНОЙ сцены:
-{{
-  "scene_id": "final_battle",
-  "choices": [
-    {{"text": "Атаковать мечом", "next_scene": "quest_end"}},
-    {{"text": "Использовать магию", "next_scene": "quest_end"}}
-  ]
-}}
+ЗАДАЧА: Создай ПОЛНЫЕ тексты сцен и выборов по плану.
 
-НЕ считай это ошибкой! Количество выборов = 2, это соответствует требованиям.
+ТРЕБОВАНИЯ:
+1. Текст сцены: минимум 50 слов, живое описание
+2. Выборы: точно как в плане, интересные формулировки
+3. next_scene: ТОЛЬКО из существующих scene_id
+4. Стиль: соответствует жанру
 
-Квест: {quest}
+ВАЖНО: НЕ меняй структуру из плана, только добавляй детали!
 
 Формат ответа:
 {{
-  "valid": true/false,
-  "errors": ["описание ошибки если есть"]
+  "scenes": [
+    {{
+      "scene_id": "точно как в плане",
+      "text": "Полное описание ситуации (50+ слов)",
+      "choices": [
+        {{
+          "text": "Текст выбора как в плане",
+          "next_scene": "точно как указано в плане"
+        }}
+      ]
+    }}
+  ]
 }}"""),
-            ("human", "Проверь квест.")
+            ("human", "Сгенерируй полный контент по плану.")
         ])
         
-        self.quest_validator = validation_prompt | self.llm | JsonOutputParser()
+        self.step3_generator = generation_prompt | self.llm | JsonOutputParser()
     
-    def generate_quest(self, genre: str, hero: str, goal: str, 
-                      scene_count: int = 10, max_depth: int = 5, 
-                      complexity: str = "medium", ending_type: str = "single") -> Dict:
-        """Генерация квеста с использованием LangChain"""
+    def _create_step4_validation(self):
+        """Этап 4: Валидация и автоисправления"""
+        validation_prompt = ChatPromptTemplate.from_messages([
+            ("system", """ЭТАП 4: ВАЛИДАЦИЯ И ИСПРАВЛЕНИЯ
+
+Квест: {quest}
+
+ПРОВЕРЬ И ИСПРАВЬ:
+1. Каждая сцена (кроме quest_end) имеет минимум 2 выбора
+2. Все next_scene существуют в списке сцен
+3. quest_end имеет выбор "Завершить квест" -> quest_end
+4. Нет циклов (сцены не ведут назад)
+
+ЕСЛИ НАХОДИШЬ ОШИБКИ - ИСПРАВЬ ИХ!
+
+Формат ответа:
+{{
+  "validation_result": "passed/fixed",
+  "issues_found": ["список найденных проблем"],
+  "corrections_made": ["список исправлений"],
+  "final_quest": {{
+    "scenes": [...]
+  }}
+}}"""),
+            ("human", "Проверь и исправь квест.")
+        ])
         
-        if not self.llm:
-            return {"error": "LangChain не настроен. Проверьте настройки."}
+        self.step4_validator = validation_prompt | self.llm | JsonOutputParser()
+    
+    def generate_quest(self, genre: str, hero: str, goal: str, scene_count: int = 10, 
+                      max_depth: int = 5, complexity: str = "medium", 
+                      ending_type: str = "single") -> Dict[str, Any]:
+        """Многоэтапная генерация квеста"""
+        
+        if not self.is_available():
+            return {"error": "LangChain генератор недоступен"}
         
         try:
-            print("🧠 Этап 1: Планирование структуры квеста...")
+            print("🗺️ Этап 1: Создание структурной карты...")
             
-            # Этап 1: Планирование
-            plan_params = {
+            # Этап 1: Структурная карта
+            structure_params = {
                 "genre": genre,
                 "hero": hero,
                 "goal": goal,
-                "scene_count": scene_count,
-                "max_depth": max_depth,
-                "complexity": complexity
+                "scene_count": scene_count
             }
             
-            plan = self.quest_planner.invoke(plan_params)
-            print(f"📋 План создан: {len(plan.get('scene_ids', []))} сцен")
+            quest_structure = self.step1_mapper.invoke(structure_params)
+            print(f"✅ Структура создана: {len(quest_structure.get('quest_structure', {}).get('scenes', []))} сцен")
             
-            # Проверка плана
-            if not plan.get('validation', {}).get('has_quest_end', False):
-                return {"error": "План не содержит сцену quest_end"}
+            print("📋 Этап 2: Детальное планирование выборов...")
             
-            if not plan.get('validation', {}).get('no_cycles', False):
-                return {"error": "План содержит циклы"}
+            # Этап 2: Детальное планирование
+            planning_params = {
+                "quest_structure": json.dumps(quest_structure, ensure_ascii=False),
+                "genre": genre,
+                "hero": hero,
+                "goal": goal
+            }
             
-            # Проверяем количество сцен в плане
-            scene_ids = plan.get('scene_ids', [])
-            if len(scene_ids) != scene_count:
-                return {"error": f"План содержит {len(scene_ids)} сцен, а нужно {scene_count}"}
+            detailed_plan = self.step2_planner.invoke(planning_params)
+            planned_scenes = detailed_plan.get('detailed_plan', [])
+            print(f"✅ План детализирован: {len(planned_scenes)} сцен с выборами")
             
-            print("🎮 Этап 2: Создание содержимого квеста...")
+            print("✍️ Этап 3: Генерация полного контента...")
             
-            # Этап 2: Генерация квеста по плану
+            # Этап 3: Генерация контента
             generation_params = {
-                "plan": json.dumps(plan, ensure_ascii=False),
+                "detailed_plan": json.dumps(detailed_plan, ensure_ascii=False),
                 "genre": genre,
                 "hero": hero,
-                "goal": goal,
-                "complexity": complexity
+                "goal": goal
             }
             
-            quest = self.quest_creator.invoke(generation_params)
-            print(f"✍️ Квест создан: {len(quest.get('scenes', []))} сцен")
+            quest_content = self.step3_generator.invoke(generation_params)
+            generated_scenes = quest_content.get('scenes', [])
+            print(f"✅ Контент сгенерирован: {len(generated_scenes)} сцен")
             
-            print("🔍 Этап 3: Валидация квеста...")
+            print("🔍 Этап 4: Валидация и исправления...")
             
-            # Этап 3: Валидация
+            # Этап 4: Валидация и исправления
             validation_params = {
-                "quest": json.dumps(quest, ensure_ascii=False)
+                "quest": json.dumps(quest_content, ensure_ascii=False)
             }
             
-            validation = self.quest_validator.invoke(validation_params)
+            validation_result = self.step4_validator.invoke(validation_params)
             
-            if not validation.get('valid', False):
-                errors = validation.get('errors', [])
-                print(f"❌ Квест не прошел валидацию: {errors}")
-                return {"error": f"Квест не прошел валидацию: {', '.join(errors)}"}
+            if validation_result.get('validation_result') == 'passed':
+                print("✅ Квест прошел валидацию!")
+                final_quest = validation_result.get('final_quest', quest_content)
+            elif validation_result.get('validation_result') == 'fixed':
+                print("🔧 Квест исправлен автоматически!")
+                corrections = validation_result.get('corrections_made', [])
+                for correction in corrections:
+                    print(f"  - {correction}")
+                final_quest = validation_result.get('final_quest', quest_content)
+            else:
+                issues = validation_result.get('issues_found', [])
+                print(f"❌ Критические ошибки: {issues}")
+                return {"error": f"Не удалось исправить ошибки: {', '.join(issues)}"}
             
-            # Дополнительная проверка quest_end
-            quest_scenes = quest.get('scenes', [])
-            quest_end_scene = None
-            for scene in quest_scenes:
-                if scene.get('scene_id') == 'quest_end':
-                    quest_end_scene = scene
-                    break
-            
-            if quest_end_scene:
-                choices = quest_end_scene.get('choices', [])
-                if not choices:
-                    # Исправляем quest_end если у него нет выборов
-                    quest_end_scene['choices'] = [{"text": "Завершить квест", "next_scene": "quest_end"}]
-                    print("🔧 Исправлена сцена quest_end - добавлен выбор")
-            
-            print("✅ Квест успешно создан и валидирован!")
-            return quest
+            print("🎉 Квест успешно создан!")
+            return final_quest
             
         except Exception as e:
-            print(f"Ошибка в LangChain генерации: {e}")
-            return {"error": f"Ошибка LangChain генерации: {e}"}
-    
-    def is_available(self) -> bool:
-        """Проверка доступности LangChain генератора"""
-        return LANGCHAIN_AVAILABLE and self.llm is not None
-
-
-# Глобальный экземпляр LangChain генератора
-langchain_generator = LangChainQuestGenerator()
+            print(f"❌ Ошибка в многоэтапной генерации: {e}")
+            return {"error": f"Ошибка генерации: {str(e)}"}
