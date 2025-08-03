@@ -20,8 +20,8 @@ class QuestGenerator:
         
         try:
             result = self.langchain_gen.generate_quest(
-                genre=genre, 
-                hero=hero, 
+                genre=genre,
+                hero=hero,
                 goal=goal,
                 scene_count=scene_count,
                 max_depth=max_depth,
