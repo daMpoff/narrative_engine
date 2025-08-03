@@ -440,8 +440,7 @@ const generateQuest = async () => {
     setTimeout(() => {
       const graphTab = document.getElementById("graph-tab");
       if (graphTab) {
-        const tab = new bootstrap.Tab(graphTab);
-        tab.show();
+        graphTab.click();
       }
     }, 1000);
   } catch (err) {

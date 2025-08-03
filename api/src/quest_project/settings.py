@@ -154,5 +154,5 @@ LLM_CONFIG = {
     'mistral_api_key': MISTRAL_API_KEY,
     'model_name': MISTRAL_MODEL,
     'temperature': 0.7,
-    'max_tokens': 2000,
+    'max_tokens': 100000,
 }
