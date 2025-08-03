@@ -19,24 +19,46 @@
           @click="selectNode(scene.scene_id)"
         >
           <div class="node-header">
-            <span class="node-id">{{ scene.scene_id }}</span>
+            <div class="node-title">
+              <span class="node-icon">{{ getSceneIcon(scene.scene_id) }}</span>
+              <span class="node-name">{{
+                formatSceneName(scene.scene_id)
+              }}</span>
+            </div>
             <span class="node-number">{{
               getSceneNumber(scene.scene_id)
             }}</span>
           </div>
+
+          <!-- Краткое описание сцены -->
+          <div class="node-description">
+            {{ getShortDescription(scene.text) }}
+          </div>
+
           <div class="node-choices">
+            <div class="choices-header">
+              <i class="fas fa-directions"></i>
+              <span>Выборы ({{ (scene.choices || []).length }})</span>
+            </div>
             <div
               v-for="(choice, index) in scene.choices || []"
               :key="index"
               class="choice-item"
               :class="{
                 'active-path': isActivePath(scene.scene_id, choice.next_scene),
+                'final-choice': choice.next_scene === 'quest_end',
               }"
             >
-              <span class="choice-number">{{ index + 1 }}</span>
-              <span class="choice-text">{{ choice.text }}</span>
-              <i class="fas fa-arrow-right choice-arrow"></i>
-              <span class="choice-target">{{ choice.next_scene }}</span>
+              <div class="choice-content">
+                <span class="choice-number">{{ index + 1 }}</span>
+                <span class="choice-text">{{ choice.text }}</span>
+              </div>
+              <div class="choice-arrow-container">
+                <i class="fas fa-long-arrow-alt-right choice-arrow"></i>
+                <span class="choice-target">{{
+                  formatSceneName(choice.next_scene)
+                }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -243,13 +265,101 @@ const getNodeClass = (sceneId) => {
   if (selectedNode.value === sceneId) {
     classes.push("selected");
   }
-  if (sceneId === "scene_1") {
+  if (sceneId === "start") {
     classes.push("start-node");
+  }
+  if (sceneId === "quest_end") {
+    classes.push("end-node");
   }
   if (isDragging.value && draggingNode.value === sceneId) {
     classes.push("dragging");
   }
   return classes.join(" ");
+};
+
+// Форматируем название сцены для отображения
+const formatSceneName = (sceneId) => {
+  if (!sceneId) return "";
+
+  // Заменяем подчеркивания на пробелы и делаем первую букву заглавной
+  return sceneId
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .replace(/Quest End/i, "Конец квеста")
+    .replace(/Start/i, "Начало");
+};
+
+// Получаем иконку для сцены
+const getSceneIcon = (sceneId) => {
+  if (sceneId === "start") return "🚀";
+  if (sceneId === "quest_end") return "🏁";
+
+  // Иконки по ключевым словам
+  const iconMap = {
+    forest: "🌲",
+    dark: "🌙",
+    ancient: "🏛️",
+    temple: "⛩️",
+    battle: "⚔️",
+    fight: "⚔️",
+    combat: "⚔️",
+    attack: "⚔️",
+    search: "🔍",
+    find: "🔍",
+    explore: "🗺️",
+    investigate: "🕵️",
+    treasure: "💰",
+    artifact: "💎",
+    magic: "✨",
+    spell: "🔮",
+    dragon: "🐉",
+    boss: "👹",
+    enemy: "👾",
+    monster: "👹",
+    castle: "🏰",
+    tower: "🗼",
+    cave: "🏔️",
+    dungeon: "⚫",
+    river: "🌊",
+    bridge: "🌉",
+    mountain: "⛰️",
+    village: "🏘️",
+    wizard: "🧙",
+    guard: "💂",
+    merchant: "🤵",
+    ally: "🤝",
+    door: "🚪",
+    key: "🗝️",
+    lock: "🔒",
+    trap: "🕳️",
+    heal: "💚",
+    poison: "☠️",
+    wound: "🩸",
+    rest: "😴",
+  };
+
+  for (const [keyword, icon] of Object.entries(iconMap)) {
+    if (sceneId.toLowerCase().includes(keyword)) {
+      return icon;
+    }
+  }
+
+  return "📍"; // Иконка по умолчанию
+};
+
+// Получаем краткое описание сцены
+const getShortDescription = (text) => {
+  if (!text) return "Без описания";
+
+  // Берем первые 100 символов и добавляем многоточие
+  if (text.length <= 100) return text;
+
+  const truncated = text.substring(0, 100);
+  const lastSpace = truncated.lastIndexOf(" ");
+
+  return lastSpace > 50
+    ? truncated.substring(0, lastSpace) + "..."
+    : truncated + "...";
 };
 
 // Выбираем узел
@@ -455,11 +565,12 @@ watch(
   border: 3px solid #dee2e6;
   border-radius: 15px;
   padding: 20px;
-  width: 280px;
+  width: 320px;
   cursor: grab;
   transition: all 0.3s ease;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   user-select: none;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .graph-node:hover {
@@ -482,6 +593,11 @@ watch(
   background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
 }
 
+.graph-node.end-node {
+  border-color: #dc3545;
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+}
+
 .node-header {
   display: flex;
   justify-content: space-between;
@@ -489,10 +605,35 @@ watch(
   margin-bottom: 15px;
 }
 
-.node-id {
+.node-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.node-icon {
+  font-size: 1.2em;
+  width: 24px;
+  text-align: center;
+}
+
+.node-name {
   font-weight: bold;
   color: #495057;
-  font-size: 1em;
+  font-size: 0.95em;
+  line-height: 1.2;
+}
+
+.node-description {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 15px;
+  font-size: 0.85em;
+  color: #6c757d;
+  line-height: 1.4;
+  border-left: 3px solid #007bff;
 }
 
 .node-number {
@@ -505,40 +646,63 @@ watch(
 }
 
 .node-choices {
+  margin-top: 10px;
+}
+
+.choices-header {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: #495057;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.choices-header i {
+  color: #007bff;
 }
 
 .choice-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
   background: #f8f9fa;
-  border-radius: 8px;
-  font-size: 0.9em;
-  transition: all 0.2s ease;
-  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 8px 0;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
 }
 
 .choice-item:hover {
   background: #e9ecef;
-  transform: translateX(2px);
+  transform: translateX(3px);
+  border-color: #007bff20;
 }
 
 .choice-item.active-path {
-  background: #e3f2fd;
-  border-left: 4px solid #2196f3;
-  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+}
+
+.choice-item.final-choice {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border-color: #28a745;
+}
+
+.choice-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .choice-number {
-  background: #667eea;
+  background: #007bff;
   color: white;
+  border-radius: 50%;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -547,26 +711,54 @@ watch(
   flex-shrink: 0;
 }
 
+.choice-item.active-path .choice-number,
+.choice-item.final-choice .choice-number {
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+}
+
 .choice-text {
   flex: 1;
-  color: #495057;
+  font-size: 0.9em;
+  line-height: 1.4;
   font-weight: 500;
+}
+
+.choice-arrow-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 34px;
 }
 
 .choice-arrow {
   color: #6c757d;
-  font-size: 0.8em;
+  font-size: 1em;
   flex-shrink: 0;
 }
 
+.choice-item.active-path .choice-arrow,
+.choice-item.final-choice .choice-arrow {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .choice-target {
-  background: #6c757d;
-  color: white;
-  padding: 3px 8px;
+  font-size: 0.85em;
+  color: #6c757d;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px 8px;
   border-radius: 6px;
-  font-size: 0.8em;
-  font-weight: bold;
-  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-item.active-path .choice-target,
+.choice-item.final-choice .choice-target {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .paths-info {
