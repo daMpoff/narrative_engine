@@ -38,6 +38,20 @@
             <li class="nav-item" role="presentation">
               <button
                 class="nav-link"
+                id="tree-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#tree"
+                type="button"
+                role="tab"
+                :disabled="!quest"
+              >
+                <i class="fas fa-sitemap me-2"></i>
+                Дерево
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
                 id="graph-tab"
                 data-bs-toggle="tab"
                 data-bs-target="#graph"
@@ -81,6 +95,106 @@
                   </h2>
                 </div>
                 <div class="card-body p-4">
+                  <!-- Загрузка файла -->
+                  <div class="mb-4">
+                    <div class="card border-success">
+                      <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                          <i class="fas fa-file-upload me-2"></i>
+                          Загрузить данные из файла
+                        </h5>
+                      </div>
+                      <div class="card-body">
+                        <div class="row">
+                          <div class="col-md-8 mb-3">
+                            <label for="txtFile" class="form-label">
+                              <i class="fas fa-file-alt me-2"></i>
+                              Выберите .txt файл с описанием квеста
+                            </label>
+                            <input
+                              id="txtFile"
+                              ref="fileInput"
+                              type="file"
+                              accept=".txt"
+                              class="form-control"
+                              @change="handleFileUpload"
+                            />
+                            <small class="text-muted">
+                              Файл должен содержать: жанр, главного героя и цель
+                              квеста
+                            </small>
+                          </div>
+                          <div class="col-md-4 d-flex align-items-end">
+                            <button
+                              type="button"
+                              :disabled="!selectedFile || parseLoading"
+                              class="btn btn-success w-100"
+                              @click="parseFile"
+                            >
+                              <span
+                                v-if="parseLoading"
+                                class="spinner-border spinner-border-sm me-2"
+                              ></span>
+                              <i v-else class="fas fa-upload me-2"></i>
+                              {{
+                                parseLoading
+                                  ? "Обрабатываем..."
+                                  : "Загрузить данные"
+                              }}
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Результат парсинга -->
+                        <div v-if="parseResult" class="mt-3">
+                          <div
+                            :class="[
+                              'alert',
+                              parseResult.success
+                                ? 'alert-success'
+                                : 'alert-warning',
+                            ]"
+                            role="alert"
+                          >
+                            <div class="d-flex align-items-center">
+                              <i
+                                :class="[
+                                  'me-2',
+                                  parseResult.success
+                                    ? 'fas fa-check-circle'
+                                    : 'fas fa-exclamation-triangle',
+                                ]"
+                              ></i>
+                              <div>
+                                <strong>{{
+                                  parseResult.message || parseResult.warning
+                                }}</strong>
+                                <div v-if="parseResult.data" class="mt-2 small">
+                                  <strong>Извлечено:</strong>
+                                  Жанр: "{{
+                                    parseResult.data.genre || "не найден"
+                                  }}", Герой: "{{
+                                    parseResult.data.hero || "не найден"
+                                  }}", Цель: "{{
+                                    parseResult.data.goal || "не найдена"
+                                  }}"
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Ошибка парсинга -->
+                        <div v-if="parseError" class="mt-3">
+                          <div class="alert alert-danger" role="alert">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            <strong>Ошибка:</strong> {{ parseError }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <form @submit.prevent="generateQuest">
                     <div class="row">
                       <div class="col-md-4 mb-3">
@@ -373,6 +487,20 @@
               </div>
             </div>
 
+            <!-- Tree Tab -->
+            <div class="tab-pane fade" id="tree" role="tabpanel">
+              <div v-if="quest">
+                <QuestTree :quest="quest.quest_data" />
+              </div>
+              <div v-else class="text-center py-5">
+                <i class="fas fa-sitemap fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">Дерево недоступно</h5>
+                <p class="text-muted">
+                  Сначала создайте квест, чтобы увидеть дерево структуры
+                </p>
+              </div>
+            </div>
+
             <!-- Graph Tab -->
             <div class="tab-pane fade" id="graph" role="tabpanel">
               <div v-if="quest">
@@ -402,7 +530,11 @@
 import { ref, reactive, watch } from "vue";
 import axios from "axios";
 import QuestGraph from "./QuestGraph.vue";
+import QuestTree from "./QuestTree.vue";
 import QuestHistory from "./QuestHistory.vue";
+
+// Ссылка на элемент загрузки файла
+const fileInput = ref(null);
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -420,6 +552,73 @@ const quest = ref(null);
 const loading = ref(false);
 const error = ref(null);
 
+// Переменные для работы с файлами
+const selectedFile = ref(null);
+const parseLoading = ref(false);
+const parseResult = ref(null);
+const parseError = ref(null);
+
+// Обработка выбора файла
+const handleFileUpload = (event) => {
+  const file = event.target.files[0];
+  selectedFile.value = file;
+  parseResult.value = null;
+  parseError.value = null;
+
+  if (file && !file.name.toLowerCase().endsWith(".txt")) {
+    parseError.value = "Пожалуйста, выберите файл с расширением .txt";
+    selectedFile.value = null;
+    event.target.value = "";
+  }
+};
+
+// Парсинг загруженного файла
+const parseFile = async () => {
+  if (!selectedFile.value) {
+    parseError.value = "Пожалуйста, выберите файл";
+    return;
+  }
+
+  parseLoading.value = true;
+  parseError.value = null;
+  parseResult.value = null;
+
+  try {
+    const fileFormData = new FormData();
+    fileFormData.append("file", selectedFile.value);
+
+    const response = await axios.post(
+      `${API_BASE_URL}/parse-txt/`,
+      fileFormData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    parseResult.value = response.data;
+
+    // Заполняем форму данными из файла
+    if (response.data.data) {
+      if (response.data.data.genre) {
+        formData.genre = response.data.data.genre;
+      }
+      if (response.data.data.hero) {
+        formData.hero = response.data.data.hero;
+      }
+      if (response.data.data.goal) {
+        formData.goal = response.data.data.goal;
+      }
+    }
+  } catch (err) {
+    parseError.value =
+      err.response?.data?.error || "Ошибка при обработке файла";
+  } finally {
+    parseLoading.value = false;
+  }
+};
+
 const generateQuest = async () => {
   loading.value = true;
   error.value = null;
@@ -436,11 +635,11 @@ const generateQuest = async () => {
     });
     quest.value = response.data;
 
-    // Переключаемся на вкладку графа после успешной генерации
+    // Переключаемся на вкладку дерева после успешной генерации
     setTimeout(() => {
-      const graphTab = document.getElementById("graph-tab");
-      if (graphTab) {
-        graphTab.click();
+      const treeTab = document.getElementById("tree-tab");
+      if (treeTab) {
+        treeTab.click();
       }
     }, 1000);
   } catch (err) {
@@ -453,7 +652,12 @@ const generateQuest = async () => {
 
 // Следим за изменениями quest для обновления состояния вкладок
 watch(quest, (newQuest) => {
+  const treeTab = document.getElementById("tree-tab");
   const graphTab = document.getElementById("graph-tab");
+
+  if (treeTab) {
+    treeTab.disabled = !newQuest;
+  }
   if (graphTab) {
     graphTab.disabled = !newQuest;
   }
