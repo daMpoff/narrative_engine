@@ -18,6 +18,7 @@ Narrative_Engine/
 │   │   ├── quest_app/     # Основное приложение
 │   │   ├── quest_project/ # Настройки Django
 │   │   └── manage.py
+│   ├── venv/              # Виртуальное окружение (создается локально)
 │   ├── pyproject.toml     # Зависимости Python
 │   └── output/           # Сгенерированные квесты
 └── client/               # Vue.js клиент
@@ -27,11 +28,13 @@ Narrative_Engine/
     └── package.json
 ```
 
+**Примечание**: Папка `venv/` создается локально и не добавляется в репозиторий Git.
+
 ## Установка и настройка
 
 ### Предварительные требования
 
-- Python 3.8+
+- Python 3.8+ (рекомендуется использование venv)
 - Node.js 16+
 - API ключ Mistral AI
 
@@ -44,11 +47,24 @@ cd Narrative_Engine
 
 ### 2. Настройка API сервера
 
+⚠️ **Важно**: Обязательно используйте виртуальное окружение Python для изоляции зависимостей проекта.
+
 ```bash
 cd api
 
-# Установка зависимостей
+# Создание виртуального окружения
+python -m venv venv
+
+# Активация виртуального окружения
+# На Windows:
+venv\Scripts\activate
+# На macOS/Linux:
+source venv/bin/activate
+
+# Установка Poetry в виртуальном окружении
 pip install poetry
+
+# Установка зависимостей проекта
 poetry install
 
 # Копирование файла настроек
@@ -58,6 +74,8 @@ cp env_example.txt .env
 # Добавьте ваш API ключ Mistral AI:
 # MISTRAL_API_KEY=your_api_key_here
 ```
+
+**Примечание**: Виртуальное окружение должно быть активировано каждый раз перед работой с проектом. Убедитесь, что в командной строке отображается `(venv)` перед путем.
 
 ### 3. Настройка базы данных
 
@@ -81,7 +99,16 @@ npm install
 ### 1. Запуск API сервера
 
 ```bash
-cd api/src
+cd api
+
+# Активация виртуального окружения (если не активировано)
+# На Windows:
+venv\Scripts\activate
+# На macOS/Linux:
+source venv/bin/activate
+
+# Запуск Django сервера
+cd src
 python manage.py runserver
 ```
 
@@ -227,15 +254,45 @@ MISTRAL_MODEL = "mistral-large-latest"  # или "mistral-medium-latest"
 
 ```bash
 # Тесты API
-cd api/src
+cd api
+
+# Активация виртуального окружения
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
+cd src
 python manage.py test quest_app.tests
 
 # Тесты клиента
-cd client
+cd ../../client
 npm run test
 ```
 
 ## Устранение неполадок
+
+### Проблемы с виртуальным окружением
+
+```
+Ошибка: ModuleNotFoundError или command not found
+```
+
+**Решение:**
+
+1. Убедитесь, что виртуальное окружение активировано:
+   ```bash
+   # Windows:
+   venv\Scripts\activate
+   # macOS/Linux:
+   source venv/bin/activate
+   ```
+2. Проверьте наличие `(venv)` в командной строке
+3. Переустановите зависимости:
+   ```bash
+   pip install poetry
+   poetry install
+   ```
 
 ### Проблемы с API ключом
 
@@ -264,8 +321,16 @@ npm run test
 ### Проблемы с базой данных
 
 ```bash
+cd api
+
+# Активация виртуального окружения
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
 # Сброс базы данных
-cd api/src
+cd src
 python manage.py flush
 
 # Пересоздание миграций
@@ -283,28 +348,8 @@ python manage.py migrate
 
 ### Мониторинг
 
-- Логи API сервера: `api/src/logs/`
 - Сгенерированные квесты: `api/output/`
 - Статистика использования в Django Admin
-
-## Лицензия
-
-MIT License
-
-## Поддержка
-
-При возникновении проблем:
-
-1. Проверьте раздел "Устранение неполадок"
-2. Изучите логи в консоли
-3. Создайте issue в репозитории проекта
-
-## Вклад в проект
-
-1. Fork репозитория
-2. Создайте feature branch
-3. Внесите изменения
-4. Создайте Pull Request
 
 ---
 
